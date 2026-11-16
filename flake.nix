@@ -1,5 +1,5 @@
 {
-  description = "multiplexer-dashboard: a fullscreen dashboard of tmux, zellij and herdr sessions and the coding agents in them";
+  description = "multiplexer-sidebar: a sidebar and a fullscreen dashboard of tmux, zellij and herdr sessions and the coding agents in them";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

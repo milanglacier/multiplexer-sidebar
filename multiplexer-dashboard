@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""A fullscreen picker for tmux, zellij and herdr sessions and the coding
-agents that run in them.
+"""A sidebar and a fullscreen dashboard of tmux, zellij and herdr sessions
+and the coding agents that run in them.
 
-Usage: multiplexer-dashboard [--multiplexer tmux|zellij|herdr]
-                             [--client CLIENT] [--dir DIR]
-                             [--theme auto|light|dark] [--no-bg]
-                             [--sidebar] [--compact]
-                             [--tabs collapsed|expanded]
+Usage: multiplexer-sidebar [--multiplexer tmux|zellij|herdr]
+                           [--client CLIENT] [--dir DIR]
+                           [--theme auto|light|dark] [--no-bg]
+                           [--sidebar] [--compact]
+                           [--tabs collapsed|expanded]
+
+The program is released under two names, multiplexer-sidebar and
+multiplexer-dashboard. Its help and error messages use the name it was run
+as.
 
 The left column lists sessions above agents, both grouped by multiplexer in
 the order zellij, tmux, herdr. A session can show its tabs (tmux windows,
@@ -3437,8 +3441,7 @@ class View:
 
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="multiplexer-dashboard",
-        description="A fullscreen picker for tmux, zellij and herdr sessions and their coding agents.",
+        description="A sidebar and a fullscreen dashboard of tmux, zellij and herdr sessions and their coding agents.",
     )
     p.add_argument(
         "--multiplexer",
@@ -3494,12 +3497,14 @@ def run_app(app: App, term: Term, inbox: Inbox) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    # The same name that argparse puts in the help and in its own errors.
+    prog = os.path.basename(sys.argv[0])
     if args.zellij_focus_pane:
         return zellij_focus_pane(*args.zellij_focus_pane)
     ctx = detect_context(os.environ, shutil.which, args.multiplexer)
     if not ctx.listed:
         print(
-            "multiplexer-dashboard: found none of zellij, herdr, or tmux",
+            f"{prog}: found none of zellij, herdr, or tmux",
             file=sys.stderr,
         )
         return 1
@@ -3508,7 +3513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         term = Term(inbox.read_fd, focus_events=args.sidebar)
     except OSError as e:
         print(
-            f"multiplexer-dashboard: cannot open the terminal: {e.strerror}",
+            f"{prog}: cannot open the terminal: {e.strerror}",
             file=sys.stderr,
         )
         return 1
@@ -3559,7 +3564,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             os.execvp(plan.attach[0], plan.attach)
         except OSError as e:
             print(
-                f"multiplexer-dashboard: {plan.attach[0]}: {e.strerror}",
+                f"{prog}: {plan.attach[0]}: {e.strerror}",
                 file=sys.stderr,
             )
             return 1
