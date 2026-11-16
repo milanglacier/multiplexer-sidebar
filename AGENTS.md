@@ -77,3 +77,9 @@ and the outcome to preserve, not a step-by-step patch.
 - **In a zellij layout, `children` inside a split stays empty** in a tab
   with no content of its own, which is every tab that the user opens later.
   The README's sidebar layout uses `new_tab_template` for that reason.
+- **Outside the devShell, zellij's welcome screen can break the e2e
+  tests.** zellij 0.46 opens a desktop setup screen the first time it runs
+  with fresh state, unless its binary is in a package manager's path such
+  as `/nix/store`. `scripts/e2e.sh` starts with fresh state on every run,
+  so a zellij from a path like `~/.local/bin` covers the tab with that
+  screen, and the zellij tab checks fail. Run the e2e tests in the devShell.
