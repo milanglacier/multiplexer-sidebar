@@ -1,0 +1,44 @@
+# Pushing a tag such as v1.2.3 publishes a GitHub release for it. The
+# release notes are the message of the annotated tag, and the release
+# attaches the script twice, once as multiplexer-sidebar and once as
+# multiplexer-dashboard.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # actions/checkout can leave the tag without its message, so the
+      # tag is fetched again to read the release notes from it.
+      - name: Fetch the annotated tag
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      # multiplexer-sidebar is a symlink in the repository, and cp copies
+      # the file it points to, so both assets hold the full script.
+      - name: Copy the script under both names
+        run: |
+          mkdir dist
+          cp multiplexer-dashboard dist/multiplexer-dashboard
+          cp multiplexer-sidebar dist/multiplexer-sidebar
+          chmod +x dist/*
+          cmp dist/multiplexer-dashboard dist/multiplexer-sidebar
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-from-tag \
+            dist/multiplexer-sidebar dist/multiplexer-dashboard
