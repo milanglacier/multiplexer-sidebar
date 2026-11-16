@@ -1,16 +1,18 @@
-# multiplexer-dashboard
+# multiplexer-sidebar
 
-A herdr-style sidebar for [tmux](https://github.com/tmux/tmux) and
-[zellij](https://zellij.dev), and for [herdr](https://herdr.dev) itself:
-press one key and
-see every session and every coding agent (claude, codex, opencode, pi,
-gemini and others) in one place, with a live preview of each. Press Enter to
-jump there.
+A herdr-style sidebar and a fullscreen dashboard for
+[tmux](https://github.com/tmux/tmux) and [zellij](https://zellij.dev), and
+for [herdr](https://herdr.dev) itself. Both show every session and every
+coding agent (claude, codex, opencode, pi, gemini and others) in one place.
+Press Enter to jump there.
 
-- Press the key binding inside tmux, zellij or herdr to open the dashboard
-  in a floating pane, pick a session or an agent, and land on it.
-- Run `multiplexer-dashboard` in a plain shell, such as right after you SSH
-  into a machine, to see the sessions of every installed multiplexer and
+- Keep the sidebar open in a narrow pane beside your work, as in herdr, to
+  see at a glance which agent is working and which one is waiting for you.
+- Press a key inside tmux, zellij or herdr to open the fullscreen dashboard
+  in a floating pane, with a live preview of each session and agent. Pick
+  one and land on it.
+- Run `multiplexer-sidebar` in a shell with no multiplexer attached, such
+  as right after you SSH into a machine, to see the sessions of every installed multiplexer and
   attach to one.
 - Create, rename and kill sessions without remembering each multiplexer's
   commands.
@@ -66,10 +68,15 @@ since the dashboard already speaks to the other two.
 It is one file that needs Python 3.9 or later and nothing else:
 
 ```sh
-curl -L -o ~/.local/bin/multiplexer-dashboard \
-  https://raw.githubusercontent.com/milanglacier/multiplexer-dashboard/main/multiplexer-dashboard
-chmod +x ~/.local/bin/multiplexer-dashboard
+curl -L -o ~/.local/bin/multiplexer-sidebar \
+  https://github.com/milanglacier/multiplexer-sidebar/releases/latest/download/multiplexer-sidebar
+chmod +x ~/.local/bin/multiplexer-sidebar
 ```
+
+`multiplexer-dashboard` is an alias of `multiplexer-sidebar`. Each release
+has a file under each name, and the two files are identical. Key bindings
+that run `multiplexer-dashboard` keep working if you download that file
+instead.
 
 ## Set up a key binding
 
@@ -79,14 +86,14 @@ room: below about 72 columns the preview is hidden.
 tmux 3.8 (`~/.tmux.conf`):
 
 ```tmux
-bind tab new-pane -O -x80% -y80% -X10% -Y10% -c '#{pane_current_path}' multiplexer-dashboard
+bind tab new-pane -O -x80% -y80% -X10% -Y10% -c '#{pane_current_path}' multiplexer-sidebar
 ```
 
 zellij (`~/.config/zellij/config.kdl`):
 
 ```kdl
 bind "Tab" {
-    Run "multiplexer-dashboard" {
+    Run "multiplexer-sidebar" {
         floating true
         close_on_exit true
         width "80%"
@@ -104,14 +111,14 @@ herdr:
 [[keys.command]]
 key = "prefix+alt+d"
 type = "popup"
-command = "multiplexer-dashboard"
+command = "multiplexer-sidebar"
 width = 140
 height = 40
 ```
 
 ## Keep it open in a sidebar
 
-`multiplexer-dashboard --sidebar` shows only the Sessions and Agents lists,
+`multiplexer-sidebar --sidebar` shows only the Sessions and Agents lists,
 so it fits a narrow pane of about 30 columns. It stays open after you
 switch: Enter takes you to the session or agent, Escape goes back to the
 pane you came from, and `q` quits.
@@ -120,7 +127,7 @@ tmux (`~/.tmux.conf`), to open a sidebar on the left of the current window:
 
 ```tmux
 set -g focus-events on
-bind b split-window -hbf -l 32 multiplexer-dashboard --sidebar
+bind b split-window -hbf -l 32 multiplexer-sidebar --sidebar
 ```
 
 zellij (`~/.config/zellij/layouts/default.kdl`), to give every tab a
@@ -133,7 +140,7 @@ layout {
             plugin location="tab-bar"
         }
         pane split_direction="vertical" {
-            pane size=32 command="multiplexer-dashboard" close_on_exit=true {
+            pane size=32 command="multiplexer-sidebar" close_on_exit=true {
                 args "--sidebar"
             }
             pane focus=true
@@ -160,7 +167,7 @@ tmux (`~/.tmux.conf`):
 
 ```tmux
 set -g focus-events on
-bind b split-window -hbf -l 3 multiplexer-dashboard --compact
+bind b split-window -hbf -l 3 multiplexer-sidebar --compact
 ```
 
 zellij (`~/.config/zellij/layouts/compact-sidebar.kdl`), as a layout of its
@@ -175,7 +182,7 @@ layout {
             plugin location="tab-bar"
         }
         pane split_direction="vertical" {
-            pane size=5 command="multiplexer-dashboard" close_on_exit=true {
+            pane size=5 command="multiplexer-sidebar" close_on_exit=true {
                 args "--compact"
             }
             pane focus=true
@@ -222,9 +229,9 @@ click to select, click again to go there, and scroll to move.
 <summary>Options and details</summary>
 
 ```
-multiplexer-dashboard [--multiplexer tmux|zellij|herdr] [--client CLIENT]
-                      [--dir DIR] [--theme auto|light|dark] [--no-bg]
-                      [--sidebar] [--compact] [--tabs collapsed|expanded]
+multiplexer-sidebar [--multiplexer tmux|zellij|herdr] [--client CLIENT]
+                    [--dir DIR] [--theme auto|light|dark] [--no-bg]
+                    [--sidebar] [--compact] [--tabs collapsed|expanded]
 ```
 
 - `--multiplexer` lists only one multiplexer.
