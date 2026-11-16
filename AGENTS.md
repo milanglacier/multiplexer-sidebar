@@ -14,6 +14,10 @@ behavior with earlier behavior.
 The dashboard is one executable file, `multiplexer-dashboard`, that users
 drop into a `bin` directory. Keep it that way:
 
+- `multiplexer-sidebar` is a symlink to `multiplexer-dashboard`, so the
+  repository has one script under two names. Read and edit only
+  `multiplexer-dashboard`. Each release attaches two identical copies of
+  the script, one under each name.
 - Standard library only, Python 3.9 or later, and no `curses`.
 - Ask each multiplexer for its state through its own CLI, and use its own
   commands for actions. Store nothing on disk; there is no config file.
