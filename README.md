@@ -148,6 +148,14 @@ layout {
 When zellij brings back an exited session, press Enter in the sidebar to
 start it again.
 
+For a sidebar that takes only a few columns, use `--compact` instead of
+`--sidebar`, such as `split-window -hbf -l 3 multiplexer-dashboard --compact`
+in tmux. It shows each session's number and the status of its agents, and
+each agent's icon and status. A `--sidebar` pane narrower than 24 columns
+shows the same compact view, so you can shrink and widen the pane with your
+multiplexer's keys. In the compact view, move and switch as usual, and widen
+the pane to filter or to create, rename or kill sessions.
+
 ## Keys
 
 | Key             | Action                                 |
@@ -173,7 +181,7 @@ click to select, click again to go there, and scroll to move.
 ```
 multiplexer-dashboard [--multiplexer tmux|zellij|herdr] [--client CLIENT]
                       [--dir DIR] [--theme auto|light|dark] [--no-bg]
-                      [--sidebar] [--tabs collapsed|expanded]
+                      [--sidebar] [--compact] [--tabs collapsed|expanded]
 ```
 
 - `--multiplexer` lists only one multiplexer.
@@ -187,6 +195,8 @@ multiplexer-dashboard [--multiplexer tmux|zellij|herdr] [--client CLIENT]
 - `--sidebar` shows only the lists, and inside a multiplexer stays open
   after a switch. See [Keep it open in a sidebar](#keep-it-open-in-a-sidebar).
   herdr has a sidebar of its own, and in herdr Escape does nothing.
+- `--compact` shows the sidebar as a narrow strip of numbers and statuses.
+  It implies `--sidebar`.
 - `--tabs expanded` starts with the tabs of every session shown. The
   default, `--tabs collapsed`, starts with them hidden. Either way, `h`,
   `l`, `H` and `L` change it.

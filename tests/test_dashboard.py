@@ -1611,20 +1611,18 @@ class SidebarTest(unittest.TestCase):
             self.assertEqual(len(lines), rows)
             self.assertEqual({md.width(line) for line in lines}, {cols})
             self.assertIn("Sessions", plain(lines[0]))
-        for cols, rows in [(23, 10), (24, 9), (10, 3)]:
-            lines = app.render(cols, rows)
-            self.assertEqual(len(lines), rows)
-            self.assertEqual({md.width(line) for line in lines}, {cols})
-            text = " ".join(
-                plain(line).strip() for line in lines if plain(line).strip()
-            )
-            self.assertTrue(
-                "Make the window at least 24×10.".startswith(text), (cols, rows, text)
-            )
-        lines = [plain(line) for line in app.render(23, 10)]
+        # A pane that is wide enough but too short shows the message. A
+        # narrower pane shows the compact view.
+        lines = app.render(24, 9)
+        self.assertEqual(len(lines), 9)
+        self.assertEqual({md.width(line) for line in lines}, {24})
         self.assertIn(
-            "Make the window at least 24×10.", " ".join(line.strip() for line in lines)
+            "Make the window at least 24×10.",
+            " ".join(plain(line).strip() for line in lines),
         )
+        lines = [plain(line) for line in app.render(23, 10)]
+        self.assertNotIn("Make the window", " ".join(lines))
+        self.assertEqual(lines[0], "━" * 23)
 
     def test_footer_and_help(self):
         app, _ = self.app()
@@ -1961,6 +1959,209 @@ class SidebarTest(unittest.TestCase):
             ],
         )
         self.assertIsNone(md.Tmux(runner, {}).visible())
+
+
+class CompactTest(unittest.TestCase):
+    def app(self, **options):
+        options.setdefault("sidebar", True)
+        options.setdefault("compact", True)
+        app = make_app(**options)
+        for g in groups():
+            if g.mux in app.groups:
+                app.set_group(g)
+        return app
+
+    def screen(self, app, cols=4, rows=20):
+        lines = app.render(cols, rows)
+        self.assertEqual(len(lines), rows)
+        self.assertTrue(all(md.width(line) == cols for line in lines))
+        return [plain(line) for line in lines]
+
+    def keys(self, app, *ks):
+        for k in ks:
+            app.handle(md.Event("key", k))
+
+    def test_summary_status(self):
+        def agents(*statuses):
+            return [
+                md.Agent("herdr", "s", "s", "1", 1, f"p{i}", "pi", status=st)
+                for i, st in enumerate(statuses)
+            ]
+
+        self.assertIsNone(md.summary_status([]))
+        self.assertEqual(md.summary_status(agents(None, None)), "agents")
+        self.assertEqual(md.summary_status(agents("done", "idle")), "idle")
+        self.assertEqual(md.summary_status(agents("idle", "working")), "working")
+        self.assertEqual(md.summary_status(agents("working", "error")), "error")
+        self.assertEqual(md.summary_status(agents("error", "blocked")), "blocked")
+        self.assertEqual(md.summary_status(agents(None, "unknown")), "unknown")
+
+    def test_compact_implies_sidebar(self):
+        args = md.parse_args(["--compact"])
+        self.assertTrue(args.compact)
+        self.assertTrue(args.sidebar)
+        args = md.parse_args(["--sidebar"])
+        self.assertFalse(args.compact)
+        self.assertTrue(args.sidebar)
+        self.assertFalse(md.parse_args([]).sidebar)
+
+    def test_when_the_view_is_compact(self):
+        app = self.app()
+        self.assertTrue(app.compact)
+        app.render(80, 20)
+        self.assertTrue(app.compact)
+        app = self.app(compact=False)
+        self.assertFalse(app.compact)
+        app.render(23, 20)
+        self.assertTrue(app.compact)
+        app.render(24, 20)
+        self.assertFalse(app.compact)
+        self.assertIn("Sessions", plain(app.render(24, 20)[0]))
+        app = self.app(compact=False, sidebar=False)
+        app.render(10, 20)
+        self.assertFalse(app.compact)
+
+    def test_layout(self):
+        lines = self.screen(self.app())
+        self.assertEqual(
+            lines[:7],
+            ["━━━━", "1 ◆ ", "2   ", "━━━━", "1   ", "2 ◆ ", "    "],
+        )
+        # The lists split the height as the full sidebar does, with one row
+        # between them.
+        self.assertEqual(lines[11], "    ")
+        self.assertEqual(lines[12:16], ["━━━━", "✻   ", "◎   ", "━━━━"])
+        self.assertEqual(lines[16], "π   ")
+
+    def test_status_of_sessions_and_agents(self):
+        app = self.app()
+        agents = app.groups["zellij"].agents
+        agents[0].status = "idle"
+        agents[1].status = "blocked"
+        lines = self.screen(app)
+        self.assertEqual(lines[1], "1 × ")
+        # A space separates an agent's icon from its status.
+        self.assertEqual(lines[13:15], ["✻ ○ ", "◎ × "])
+
+    def test_tab_numbers_sit_between_number_and_status(self):
+        app = self.app()
+        self.keys(app, "l")
+        lines = self.screen(app)
+        self.assertEqual(
+            lines[:7],
+            ["━━━━", "1 ◆ ", " 1◆ ", " 2◆ ", "2   ", "━━━━", "1   "],
+        )
+        self.keys(app, "h")
+        self.assertEqual(self.screen(app)[1], "1 ◆ ")
+        # A tab number of two digits widens the column while it shows.
+        app.groups["zellij"].tabs[1].index = 10
+        self.keys(app, "l")
+        self.assertEqual(self.screen(app, 5)[1:4], ["1  ◆ ", "  1◆ ", " 10◆ "])
+
+    def test_numbers_line_up(self):
+        app = make_app(listed=("tmux",), sidebar=True, compact=True)
+        app.set_group(
+            md.Group(
+                "tmux",
+                [md.Session("tmux", f"s{i}", id=f"${i}") for i in range(12)],
+            )
+        )
+        lines = self.screen(app, 4, 30)
+        self.assertEqual(lines[1], " 1  ")
+        self.assertEqual(lines[9], " 9  ")
+        self.assertEqual(lines[12], "12  ")
+
+    def test_current_session_is_highlighted(self):
+        app = self.app()
+        app.groups["tmux"].sessions[1].current = True
+        lines = app.render(4, 20)
+        love = "38;2;{};{};{}".format(*md.Theme(True).love)
+        self.assertIn(love, lines[5])
+        self.assertNotIn(love, lines[4])
+
+    def test_the_selection_is_brighter_in_the_focused_list(self):
+        app = self.app()
+        t = md.Theme(True)
+        med = "48;2;{};{};{}".format(*t.hl_med)
+        low = "48;2;{};{};{}".format(*t.hl_low)
+        lines = app.render(4, 20)
+        self.assertIn(med, lines[1])
+        self.assertIn(low, lines[13])
+        self.assertNotIn(med, lines[2])
+        self.keys(app, "tab")
+        lines = app.render(4, 20)
+        self.assertIn(low, lines[1])
+        self.assertIn(med, lines[13])
+        self.assertNotIn("▌", "".join(lines))
+
+    def test_click_selects_and_a_second_click_switches(self):
+        app = self.app(listed=("tmux",), inside=("tmux",))
+        app.render(4, 20)
+        row = next(h for h in app.hits if h.which == md.SESSIONS and h.index == 1)
+        app.handle(md.Event("mouse", button=0, x=row.x0, y=row.y0))
+        self.assertEqual(app.selected().session.name, "monopi")
+        app.handle(md.Event("mouse", button=0, x=row.x0, y=row.y0))
+        self.assertEqual(app.runner.calls, [["tmux", "switch-client", "-t", "$1"]])
+
+    def test_dialog_keys_do_nothing(self):
+        app = self.app(compact=False)
+        app.render(23, 20)
+        for k in ("/", "?", "n", "r", "x"):
+            self.keys(app, k)
+            self.assertIsNone(app.mode, k)
+        app.render(24, 20)
+        self.keys(app, "r")
+        self.assertEqual(app.mode, "rename")
+
+    def test_an_open_dialog_closes(self):
+        app = self.app(compact=False)
+        app.render(30, 20)
+        self.keys(app, "x")
+        self.assertEqual(app.mode, "kill")
+        app.render(10, 20)
+        self.assertIsNone(app.mode)
+        self.assertEqual(app.runner.calls, [])
+        # The filter input clears the filter as Escape does.
+        app.render(30, 20)
+        self.keys(app, "/", "d")
+        self.assertEqual(app.filter, "d")
+        app.render(10, 20)
+        self.assertIsNone(app.mode)
+        self.assertEqual(app.filter, "")
+
+    def test_a_kept_filter_is_marked(self):
+        app = self.app(compact=False)
+        app.render(30, 20)
+        self.keys(app, "/", "d", "o", "t", "enter")
+        lines = self.screen(app)
+        self.assertEqual(lines[:3], ["━━━━", "1 ◆ ", "    "])
+        self.assertEqual(lines[11], "/   ")
+        self.keys(app, "esc")
+        self.assertEqual(app.filter, "")
+        self.assertEqual(self.screen(app)[11], "    ")
+
+    def test_a_warning_is_marked(self):
+        app = self.app()
+        app.say("failed", warn=True)
+        self.assertEqual(self.screen(app)[11], "!   ")
+        app.say("done")
+        self.assertEqual(self.screen(app)[11], "    ")
+
+    def test_group_bars_while_loading_and_on_error(self):
+        app = make_app(listed=("herdr",), sidebar=True, compact=True)
+        muted = "38;2;{};{};{}".format(*md.Theme(True).muted)
+        love = "38;2;{};{};{}".format(*md.Theme(True).love)
+        self.assertIn(muted, app.render(4, 20)[0])
+        app.set_group(md.Group("herdr", error="server not running"))
+        self.assertIn(love, app.render(4, 20)[0])
+
+    def test_narrow_and_short_panes(self):
+        app = self.app()
+        self.keys(app, "l")
+        lines = self.screen(app, 2, 20)
+        self.assertEqual(lines[:3], ["━━", "1 ", " 1"])
+        for rows in (0, 1, 3):
+            self.assertEqual(self.screen(app, 4, rows), ["    "] * rows)
 
 
 if __name__ == "__main__":

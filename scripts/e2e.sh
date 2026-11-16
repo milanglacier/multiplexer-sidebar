@@ -740,6 +740,49 @@ eventually "the sidebar pane closed" 0 sh -c "tmux list-panes -t side: -F '#{pan
 t kill-window -t $w
 tm kill-session -t side
 
+# The lines of a pane of the tmux under test, such as a sidebar.
+pane_screen() { tm capture-pane -p -t "$1"; }
+
+step "tmux compact sidebar: a 3-column split with --compact"
+tm new-session -d -s cside -c "$tmp/proj/plain" -x 120 -y 30
+compact_pane=$(tm split-window -h -b -l 3 -P -F '#{pane_id}' -t cside: "$dash --theme dark --compact")
+t new-window -d -t e2e -n tc "clean tmux attach -t =cside"
+w=e2e:tc
+n_sessions=$(tm list-sessions | wc -l | tr -d ' ')
+eventually "the compact sidebar numbers every tmux session" "$n_sessions" \
+    sh -c "tmux capture-pane -p -t '$compact_pane' | grep -c '^[0-9]'"
+check "it shows no session names" "$(pane_screen "$compact_pane" | grep -c -e alpha -e beta)" 0
+check "and no panel borders" "$(pane_screen "$compact_pane" | grep -c '╭')" 0
+client=$(tm list-clients -F '#{client_name} #{session_name}' | awk '$2 == "cside" { print $1 }')
+second=$(tm list-sessions -F '#{session_created} #{session_id} #{session_name}' |
+    sed 's/ \$/ /' | sort -n -k1,1 -k2,2 | sed -n 2p | cut -d' ' -f3)
+
+step "tmux compact sidebar: j and Enter switch the client and the pane stays"
+tm select-pane -t "$compact_pane"
+t send-keys -t $w j
+t send-keys -t $w Enter
+eventually "the client switched to the second session" "$second" \
+    tm display -p -c "$client" '#{session_name}'
+check "the compact sidebar still runs" \
+    "$(tm list-panes -t cside: -F '#{pane_id}' | grep -c -- "$compact_pane")" 1
+t kill-window -t $w
+tm kill-session -t cside
+
+step "tmux compact sidebar: a narrow --sidebar pane turns compact and back"
+tm new-session -d -s rside -c "$tmp/proj/plain" -x 120 -y 30
+resize_pane=$(tm split-window -h -b -l 32 -P -F '#{pane_id}' -t rside: "$dash --theme dark --sidebar")
+t new-window -d -t e2e -n tr "clean tmux attach -t =rside"
+w=e2e:tr
+wait_for $w "─ Sessions ─" && echo "ok: a 32-column sidebar is full"
+tm resize-pane -t "$resize_pane" -x 3
+wait_gone $w "─ Sessions ─" >/dev/null
+eventually "a 3-column sidebar is compact" "━━━" sh -c "tmux capture-pane -p -t '$resize_pane' | head -1"
+tm resize-pane -t "$resize_pane" -x 32
+wait_for $w "─ Sessions ─" && echo "ok: widened again, the sidebar is full"
+wait_for $w "alpha" && echo "ok: and shows the session names"
+t kill-window -t $w
+tm kill-session -t rside
+
 # ---------------------------------------------------------------- nested
 
 step "nested: zellij inside tmux lists both"

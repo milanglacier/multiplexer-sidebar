@@ -5,7 +5,8 @@ agents that run in them.
 Usage: multiplexer-dashboard [--multiplexer tmux|zellij|herdr]
                              [--client CLIENT] [--dir DIR]
                              [--theme auto|light|dark] [--no-bg]
-                             [--sidebar] [--tabs collapsed|expanded]
+                             [--sidebar] [--compact]
+                             [--tabs collapsed|expanded]
 
 The left column lists sessions above agents, both grouped by multiplexer in
 the order zellij, tmux, herdr. A session can show its tabs (tmux windows,
@@ -60,6 +61,12 @@ and not at all while it is hidden, such as in a tab that is not shown. A
 hidden pane asks its multiplexer every 3 seconds whether it is on screen
 again.
 
+--compact shows the sidebar as a narrow strip: each session's number in its
+multiplexer and the most urgent status of its agents, its tabs one column
+further right when they are shown, and each agent's icon and status. It
+implies --sidebar. A --sidebar pane narrower than 24 columns shows the same
+strip. There, /, n, r, x and ? do nothing, since their dialogs do not fit.
+
 Keys: j/k or the arrows move, g/G or Home/End jump to the ends, Alt+j/k or
 Alt+arrows jump between multiplexers, h/l or the left and right arrows hide
 and show tabs, H/L hide and show all tabs, Tab switches lists, Enter
@@ -102,6 +109,8 @@ VISIBILITY_CHECK_SECONDS = 3.0
 PREVIEW_DELAY = 0.1
 MIN_COLS, MIN_ROWS, PREVIEW_MIN_COLS = 40, 12, 72
 SIDEBAR_MIN_COLS, SIDEBAR_MIN_ROWS = 24, 10
+# The compact view shows blank rows in a pane with fewer rows.
+COMPACT_MIN_ROWS = 4
 
 # ---------------------------------------------------------------- terminal
 
@@ -869,6 +878,17 @@ STATUS_ICONS = {
 # The statuses of an agent that waits for the user. The lists highlight
 # them.
 ALERT_STATUSES = ("blocked", "error")
+# The statuses from the most urgent to the least.
+STATUS_ORDER = ("blocked", "error", "working", "idle", "done", "unknown")
+
+
+def summary_status(agents: Sequence[Agent]) -> str | None:
+    """The most urgent status of the agents, "agents" when none of them
+    reports a status, or None without agents."""
+    reported = {a.status for a in agents}
+    return next(
+        (st for st in STATUS_ORDER if st in reported), "agents" if agents else None
+    )
 
 
 def agent_icon(name: str) -> str:
@@ -2086,6 +2106,8 @@ class Options:
     sidebar: bool = False
     # Start with each session's tabs shown.
     expand_tabs: bool = False
+    # Always show the compact view of the sidebar.
+    compact: bool = False
 
 
 class App:
@@ -2130,6 +2152,8 @@ class App:
         self.new_dirs: dict[str, tuple[str, str]] = {}
         self.toast: tuple[str, bool, float] | None = None
         self.hits: list[Hit] = []
+        # The width of the last drawn screen, or None before the first.
+        self.width: int | None = None
         self.result: Exit | None = None
         self.redraw_all = False
         self.loading: dict[str, bool] = {m: False for m in ctx.listed}
@@ -2170,6 +2194,16 @@ class App:
         self.view = View(self)
 
     # ------------------------------------------------------------ queries
+
+    @property
+    def compact(self) -> bool:
+        """Whether the screen shows the compact view: always with
+        --compact, and with --sidebar in a pane narrower than the full
+        sidebar."""
+        if self.options.compact:
+            return True
+        narrow = self.width is not None and self.width < SIDEBAR_MIN_COLS
+        return self.options.sidebar and narrow
 
     def ordered_groups(self) -> list[Group]:
         return [self.groups[m] for m in self.ctx.listed]
@@ -2574,6 +2608,9 @@ class App:
         self.list_key(k)
 
     def list_key(self, k: str) -> None:
+        # The dialogs and the filter input do not fit the compact view.
+        if self.compact and k in ("/", "?", "n", "r", "x"):
+            return
         w = self.focus
         n = len(self.items(w))
         if k in ("j", "down"):
@@ -2664,6 +2701,13 @@ class App:
             self.mode = "rename" if k == "r" else "kill"
             self.input = row.session.name if k == "r" else ""
 
+    def close_dialog(self) -> None:
+        """Closes the dialog or the filter input as Escape does, without
+        acting. Escape in the filter input also clears the filter."""
+        if self.mode == "filter":
+            self.filter = ""
+        self.mode, self.input = None, ""
+
     def dialog_key(self, k: str) -> None:
         mode = self.mode
         if mode == "help":
@@ -2675,9 +2719,7 @@ class App:
                 self.kill(self.target.session)
             return
         if k == "esc":
-            if mode == "filter":
-                self.filter = ""
-            self.mode, self.input = None, ""
+            self.close_dialog()
             return
         if mode == "new" and k == "tab":
             listed = self.ctx.listed
@@ -2748,7 +2790,16 @@ class View:
     def render(self, cols: int, rows: int) -> list[str]:
         app = self.app
         app.hits = []
+        app.width = cols
         app.clamp()
+        if app.compact:
+            # A dialog that the compact view cannot show would take the
+            # keys unseen.
+            if app.mode:
+                app.close_dialog()
+            Canvas.theme = Theme(app.options.dark)
+            Canvas.paint_bg = app.options.paint_bg
+            return self.compact(cols, rows)
         dim = 0.55 if app.mode in ("rename", "new", "kill", "help") else 0.0
         Canvas.theme = Theme(app.options.dark, dim)
         Canvas.paint_bg = app.options.paint_bg
@@ -2948,24 +2999,28 @@ class View:
         left = pen(" " * 4) + pen(tab.label, color, bold=tab.active)
         return lr(left, self.agent_count(self.app.agents_in_tab(tab), pen), w, pen)
 
-    def status(self, a: Agent, pen: Pen, wide: bool) -> str:
+    def status_color(self, st: str) -> RGB:
         t = Canvas.theme
+        if st == "working":
+            return t.gold
+        if st in ALERT_STATUSES:
+            return t.love
+        if st == "idle":
+            return t.foam
+        if st == "done":
+            return t.pine
+        return t.muted
+
+    def status(self, a: Agent, pen: Pen, wide: bool) -> str:
         st = a.status
         glyph = STATUS_ICONS.get(st or "")
-        if glyph is None:
+        if st is None or glyph is None:
             return ""
-        bold = st in ALERT_STATUSES
-        if st == "working":
-            color = t.gold
-        elif st in ALERT_STATUSES:
-            color = t.love
-        elif st == "idle":
-            color = t.foam
-        elif st == "done":
-            color = t.pine
-        else:
-            color = t.muted
-        return pen(f"{glyph} {st} " if wide else f"{glyph} ", color, bold=bold)
+        return pen(
+            f"{glyph} {st} " if wide else f"{glyph} ",
+            self.status_color(st),
+            bold=st in ALERT_STATUSES,
+        )
 
     def agent_name_width(self) -> int:
         """The width of the agent name column: the widest name of all
@@ -2996,6 +3051,126 @@ class View:
         if width(left) + width(tab) + width(status) <= w:
             left += tab
         return lr(left, status, w, pen)
+
+    # ------------------------------------------------------------ compact
+
+    def compact(self, cols: int, rows: int) -> list[str]:
+        """The compact view: the Sessions list, a row that marks a warning
+        or a kept filter, and the Agents list, with no borders, header,
+        preview or footer."""
+        app, t = self.app, Canvas.theme
+        if rows < COMPACT_MIN_ROWS:
+            return [fit("", cols)] * rows
+        h = rows - 1
+        sh = max(1, min(h - 1, (h * 11 + 19) // 20))
+        if app.toast and app.toast[1]:
+            mark = paint("!", t.love, bold=True)
+        elif app.filter:
+            mark = paint("/", t.gold, bold=True)
+        else:
+            mark = ""
+        middle = self.compact_line(mark, cols, Pen())
+        return (
+            self.compact_list(SESSIONS, 0, cols, sh)
+            + [middle]
+            + self.compact_list(AGENTS, sh + 1, cols, h - sh)
+        )
+
+    def compact_line(self, s: str, w: int, pen: Pen) -> str:
+        """A line of exactly w cells, cut on the right without "…"."""
+        if width(s) > w:
+            s = cut(s, 0, w)
+        return fit(s, w, pen)
+
+    def compact_list(self, which: int, y: int, w: int, h: int) -> list[str]:
+        """One list of the compact view, h rows from row y. A session row
+        shows the session's number in its multiplexer and the most urgent
+        status of its agents, with a column between them. A tab row shows
+        the tab's number in that column, and an agent row the agent's icon
+        and status with a space between them. The background marks the
+        selected row, brighter in the focused list."""
+        app, t = self.app, Canvas.theme
+        rows = app.rows(which)
+        items = items_of(rows)
+        focused = app.focus == which
+        sel = items[app.cursor[which]] if items else None
+        cursor_row = next((i for i, r in enumerate(rows) if r is sel), None)
+        start = app.offset[which] = scroll_offset(
+            rows, cursor_row, app.offset[which], h
+        )
+        app.hits.append(Hit(which, -1, y, y + h, 0, w))
+        # Number each session within its multiplexer. The columns are as
+        # wide as the largest number in the whole list, so that they stay
+        # put while the list scrolls.
+        numbers: dict[int, int] = {}
+        n = 0
+        for r in rows:
+            if r.kind == "group":
+                n = 0
+            elif r.session:
+                n += 1
+                numbers[id(r)] = n
+        nw = len(str(max(numbers.values(), default=0)))
+        # The column between a session's number and its status, as wide as
+        # the largest tab number shown.
+        tw = max((len(str(r.tab.index)) for r in rows if r.tab), default=1)
+        index = {id(r): i for i, r in enumerate(items)}
+        body = []
+        for r in rows[start : start + h]:
+            if r.kind == "group":
+                if r.note == "loading…":
+                    color = t.muted
+                elif r.note:
+                    color = t.love
+                else:
+                    color = t.mux(r.mux)
+                body.append(paint("━" * w, color))
+                continue
+            is_sel = r is sel
+            if is_sel and focused:
+                pen = Pen(t.hl_med)
+            elif is_sel:
+                pen = Pen(t.hl_low)
+            else:
+                pen = Pen()
+            line = ""
+            if r.session:
+                s = r.session
+                number = f"{numbers[id(r)]:>{nw}}" + " " * tw
+                if s.current:
+                    line += pen(number, t.love, bold=True)
+                elif s.exited:
+                    line += pen(number, t.muted, italic=True)
+                else:
+                    line += pen(number, t.text, bold=is_sel)
+                if not s.exited:
+                    line += self.status_cell(summary_status(app.agents_of(s)), pen)
+            elif r.tab:
+                tab = r.tab
+                color = t.text if tab.active or is_sel else t.subtle
+                line += pen(" " * nw) + pen(
+                    f"{tab.index:>{tw}}", color, bold=tab.active
+                )
+                line += self.status_cell(summary_status(app.agents_in_tab(tab)), pen)
+            elif r.agent:
+                a = r.agent
+                blocked = a.status in ALERT_STATUSES
+                line += pen(agent_icon(a.name), t.love if blocked else t.agent(a.name))
+                line += pen(" ") + self.status_cell(a.status, pen)
+            app.hits.append(Hit(which, index[id(r)], y + len(body), 0, 0, w))
+            body.append(self.compact_line(line, w, pen))
+        blank = fit("", w)
+        return body + [blank] * (h - len(body))
+
+    def status_cell(self, st: str | None, pen: Pen) -> str:
+        """One cell for a status: its icon, a diamond for agents that
+        report no status, or a blank without agents."""
+        if st == "agents":
+            return pen("◆", Canvas.theme.gold)
+        glyph = STATUS_ICONS.get(st or "")
+        if st is None or glyph is None:
+            return pen(" ")
+        return pen(glyph, self.status_color(st), bold=st in ALERT_STATUSES)
 
     def preview(self, w: int, h: int) -> list[str]:
         app, t = self.app, Canvas.theme
@@ -3282,6 +3457,11 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="show only the lists; inside a multiplexer, stay open after a switch",
     )
     p.add_argument(
+        "--compact",
+        action="store_true",
+        help="show the sidebar as a narrow strip of numbers and statuses; implies --sidebar",
+    )
+    p.add_argument(
         "--tabs",
         choices=["collapsed", "expanded"],
         default="collapsed",
@@ -3289,7 +3469,9 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     # Internal: see zellij_focus_pane.
     p.add_argument("--zellij-focus-pane", nargs=3, help=argparse.SUPPRESS)
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    args.sidebar = args.sidebar or args.compact
+    return args
 
 
 def run_app(app: App, term: Term, inbox: Inbox) -> None:
@@ -3353,6 +3535,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 not args.no_bg,
                 args.sidebar,
                 expand_tabs=args.tabs == "expanded",
+                compact=args.compact,
             )
             app = App(ctx, options, run_command, os.environ, inbox)
             run_app(app, term, inbox)
