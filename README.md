@@ -148,13 +148,56 @@ layout {
 When zellij brings back an exited session, press Enter in the sidebar to
 start it again.
 
-For a sidebar that takes only a few columns, use `--compact` instead of
-`--sidebar`, such as `split-window -hbf -l 3 multiplexer-dashboard --compact`
-in tmux. It shows each session's number and the status of its agents, and
-each agent's icon and status. A `--sidebar` pane narrower than 24 columns
-shows the same compact view, so you can shrink and widen the pane with your
-multiplexer's keys. In the compact view, move and switch as usual, and widen
-the pane to filter or to create, rename or kill sessions.
+### A compact sidebar for small screens
+
+On a laptop screen or a terminal split in half, a 30-column sidebar takes
+too much room. `--compact` shrinks it to a strip 3 columns wide, with a
+number and a status for each session and agent, so you can still see at a
+glance which session needs you. Move and press Enter to switch, as in the
+full sidebar.
+
+tmux (`~/.tmux.conf`):
+
+```tmux
+set -g focus-events on
+bind b split-window -hbf -l 3 multiplexer-dashboard --compact
+```
+
+zellij (`~/.config/zellij/layouts/compact-sidebar.kdl`), as a layout of its
+own, so that your default layout keeps its full sidebar or none. The
+sidebar pane is 5 columns wide, which leaves room for zellij's pane border
+and the 3-column compact sidebar.
+
+```kdl
+layout {
+    new_tab_template {
+        pane size=1 borderless=true {
+            plugin location="tab-bar"
+        }
+        pane split_direction="vertical" {
+            pane size=5 command="multiplexer-dashboard" close_on_exit=true {
+                args "--compact"
+            }
+            pane focus=true
+        }
+        pane size=2 borderless=true {
+            plugin location="status-bar"
+        }
+    }
+}
+```
+
+Start a session with this layout when you want the compact sidebar:
+
+```sh
+zellij --layout compact-sidebar
+```
+
+To filter, or to create, rename or kill a session, use the full dashboard.
+
+If you want both, use `--sidebar` and resize the pane with your
+multiplexer's keys: below 24 columns the sidebar turns compact, and when
+the pane is wide enough again it shows the full sidebar.
 
 ## Keys
 
