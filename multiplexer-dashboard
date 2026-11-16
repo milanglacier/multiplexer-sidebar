@@ -34,8 +34,9 @@ whole server. The dashboard lists the workspaces of the default herdr server
 as sessions, as multiplexer-new-session does.
 
 An agent is a pane whose foreground program is one of claude, codex,
-opencode, pi, gemini, aider, amp, crush, goose, cursor-agent, qwen, droid and
-copilot, or of the comma-separated names in MULTIPLEXER_DASHBOARD_AGENTS.
+opencode, pi, gemini, agy (Antigravity), aider, amp, crush, goose,
+cursor-agent, qwen, droid and copilot, or of the comma-separated names in
+MULTIPLEXER_DASHBOARD_AGENTS.
 When the foreground program is an interpreter (node, bun, deno or python),
 the name comes from the first argument that is not an option, such as
 ".../bin/gemini". Herdr reports its own agents and their status. Zellij
@@ -849,6 +850,8 @@ AGENT_ICONS = {
     "opencode": "▣",
     "pi": "π",
     "gemini": "✦",
+    # The Antigravity CLI.
+    "agy": "⋂",
     "aider": "▲",
     "amp": "↯",
     "crush": "❖",

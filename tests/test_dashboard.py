@@ -81,6 +81,7 @@ class AgentDetectionTest(unittest.TestCase):
         self.assertEqual(md.detect_agent(["claude"], NAMES), "claude")
         self.assertEqual(md.detect_agent(["/usr/bin/codex", "--yolo"], NAMES), "codex")
         self.assertEqual(md.detect_agent(["cursor-agent"], NAMES), "cursor-agent")
+        self.assertEqual(md.detect_agent(["agy"], NAMES), "agy")
         self.assertIsNone(md.detect_agent(["bash"], NAMES))
         self.assertIsNone(md.detect_agent([], NAMES))
 
