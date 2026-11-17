@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Opens a made-up scene of coding agents at work, in a zellij or tmux of its
-# own, for screenshots of the dashboard, the sidebar or the compact sidebar.
+# own, or spread over zellij, tmux and herdr, for screenshots of the
+# dashboard, the sidebar or the compact sidebar.
 #
-#   nix develop -c scripts/showcase.sh [dashboard|sidebar|compact]
+#   nix develop -c scripts/showcase.sh [dashboard|sidebar|compact|outside]
 #       [--mux zellij|tmux] [--theme dark|light] [--plain]
 #
 # The default is the dashboard in zellij. Run it in a terminal outside any
@@ -10,11 +11,19 @@
 # terminal; leave it as you leave the multiplexer, by detaching or quitting,
 # and the script removes everything it made.
 #
-# The multiplexer uses your own configuration, so it has your theme, status
-# bar and keys: ~/.tmux.conf or ~/.config/tmux/tmux.conf, and zellij's
-# config.kdl with its themes and layouts. --plain uses a small configuration
-# of the script's own instead. The dashboard, pi and the stand-ins take the
-# theme that matches the terminal's background, or the one --theme names.
+# outside spreads the sessions over zellij, tmux and herdr, and runs the
+# dashboard in the terminal itself, outside any multiplexer, where it lists
+# the sessions and agents of all three. It takes no --mux. larder, with the
+# real pi, is the first tmux session. The scene ends when you quit the
+# dashboard, or when you leave the multiplexer that the dashboard attached
+# to.
+#
+# The multiplexers use your own configuration, so they have your theme,
+# status bar and keys: ~/.tmux.conf or ~/.config/tmux/tmux.conf, zellij's
+# config.kdl with its themes and layouts, and herdr's config.toml. --plain
+# uses a small configuration of the script's own instead. The dashboard, pi
+# and the stand-ins take the theme that matches the terminal's background,
+# or the one --theme names.
 #
 # The scene runs with its own HOME, XDG directories, sockets and PATH, and
 # without the variables that hold API keys or tokens, so it never reaches
@@ -23,25 +32,26 @@
 # The pi agents are the real pi, which opens a made-up session that
 # scripts/showcase.py writes. claude, codex, opencode and agy are stand-ins
 # that draw a still screen from scripts/showcase.py. Every agent reports a
-# status with OSC 7501, which the dashboard shows in zellij. tmux has no
+# status with OSC 7501, which the dashboard shows in zellij. herdr finds the
+# agents itself, and the script reports their statuses to it. tmux has no
 # agent statuses, so in tmux the lists show the agents without one.
 
 set -euo pipefail
 
 usage() {
-    echo "usage: scripts/showcase.sh [dashboard|sidebar|compact] [--mux zellij|tmux] [--theme dark|light] [--plain]"
+    echo "usage: scripts/showcase.sh [dashboard|sidebar|compact|outside] [--mux zellij|tmux] [--theme dark|light] [--plain]"
 }
 die() {
     echo "showcase: $*" >&2
     exit 1
 }
 
-view=dashboard mux=zellij theme="" plain=""
+view=dashboard mux=zellij mux_given="" theme="" plain=""
 while (($#)); do
     case $1 in
-    dashboard | sidebar | compact) view=$1 ;;
+    dashboard | sidebar | compact | outside) view=$1 ;;
     --mux)
-        mux=${2:-}
+        mux=${2:-} mux_given=1
         shift
         ;;
     --theme)
@@ -62,19 +72,30 @@ while (($#)); do
 done
 [[ $mux == zellij || $mux == tmux ]] || die "--mux takes zellij or tmux"
 [[ -z $theme || $theme == dark || $theme == light ]] || die "--theme takes dark or light"
+[[ $view != outside || -z $mux_given ]] || die "outside runs zellij, tmux and herdr; it takes no --mux"
+
+# The multiplexers that the scene runs. Outside, jq also reads herdr's
+# answers.
+muxes=$mux
+[[ $view != outside ]] || muxes="zellij tmux herdr"
 
 here=$(cd "$(dirname "$0")" && pwd)
 dash="$here/../multiplexer-dashboard"
-command -v "$mux" >/dev/null || die "$mux is not installed; run inside nix develop"
+for m in $muxes; do
+    command -v "$m" >/dev/null || die "$m is not installed; run inside nix develop"
+done
+[[ $view != outside ]] || command -v jq >/dev/null || die "jq is not installed; run inside nix develop"
 command -v python3 >/dev/null || die "python3 is not installed"
 realpi=$(command -v pi) || die "pi is not installed; see https://pi.dev"
 [[ -t 0 && -t 1 ]] || die "run it in a terminal"
 read -r rows cols < <(stty size)
+[[ $view != outside ]] || ((cols >= 80 && rows >= 20)) ||
+    die "outside needs a terminal of at least 80 columns and 20 rows"
 [[ -n $theme ]] || theme=$(python3 "$here/showcase.py" background) || theme=dark
 
 # The user's own configuration, found before HOME changes.
 user_home=$HOME
-user_tmux_conf="" user_zellij_dir=""
+user_tmux_conf="" user_zellij_dir="" user_herdr_conf=""
 if [[ -z $plain ]]; then
     for f in "$HOME/.tmux.conf" "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf" \
         "$HOME/.config/tmux/tmux.conf"; do
@@ -87,6 +108,13 @@ if [[ -z $plain ]]; then
         "$HOME/.config/zellij"; do
         if [[ -n $d && -f $d/config.kdl ]]; then
             user_zellij_dir=$d
+            break
+        fi
+    done
+    for f in "${HERDR_CONFIG_PATH:-}" "${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml" \
+        "$HOME/.config/herdr/config.toml"; do
+        if [[ -n $f && -f $f ]]; then
+            user_herdr_conf=$f
             break
         fi
     done
@@ -109,17 +137,23 @@ export HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" XDG_CACHE_HOME="$tmp/cache
     TMUX_TMPDIR="$tmp/tmux" ZELLIJ_CONFIG_DIR="$tmp/config/zellij" \
     PATH="$tmp/bin:$PATH" SHELL="$tmp/bin/showcase-shell" SHOWCASE_THEME="$theme" \
     COLORTERM="${COLORTERM:-truecolor}"
-mkdir -p "$HOME/.pi/agent" "$ZELLIJ_CONFIG_DIR" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" \
-    "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$TMUX_TMPDIR" "$tmp/bin" "$tmp/pi" "$tmp/layouts"
+mkdir -p "$HOME/.pi/agent" "$ZELLIJ_CONFIG_DIR" "$XDG_CONFIG_HOME/herdr" "$XDG_CACHE_HOME" \
+    "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$TMUX_TMPDIR" "$tmp/bin" "$tmp/pi" \
+    "$tmp/layouts"
 chmod 700 "$XDG_RUNTIME_DIR"
 
 cleanup() {
-    if [[ $mux == tmux ]]; then
-        tmux kill-server 2>/dev/null || true
-    else
-        zellij kill-all-sessions -y >/dev/null 2>&1 || true
-        zellij delete-all-sessions -y >/dev/null 2>&1 || true
-    fi
+    local m
+    for m in $muxes; do
+        case $m in
+        tmux) tmux kill-server 2>/dev/null || true ;;
+        zellij)
+            zellij kill-all-sessions -y >/dev/null 2>&1 || true
+            zellij delete-all-sessions -y >/dev/null 2>&1 || true
+            ;;
+        herdr) herdr server stop >/dev/null 2>&1 || true ;;
+        esac
+    done
     if [[ -z ${KEEP:-} ]]; then rm -rf "$tmp"; else echo "kept $tmp"; fi
 }
 trap cleanup EXIT
@@ -143,6 +177,30 @@ dotfiles     shell    dotfiles
 "
 main=larder
 sessions=$(awk 'NF && !seen[$1]++ { print $1 }' <<<"$scene")
+
+# The multiplexer of each session in the outside view. larder runs in tmux,
+# whose sessions take the preview's size. herdr shows "done" for an agent
+# that finished while its workspace had no focus, and the first herdr
+# workspace has the focus, so photo-backup comes second.
+placement="
+kilnworks    zellij
+infra-live   zellij
+tributary    zellij
+larder       tmux
+dotfiles     tmux
+switchback   herdr
+photo-backup herdr
+"
+
+# sessions_of MUX: the sessions that MUX runs, in the order of the scene.
+sessions_of() {
+    if [[ $view == outside ]]; then
+        awk -v m="$1" 'NR == FNR { if ($2 == m) keep[$1] = 1; next } $1 in keep' \
+            <(echo "$placement") <(echo "$sessions")
+    elif [[ $1 == "$mux" ]]; then
+        echo "$sessions"
+    fi
+}
 
 # Each project is a git repository on a branch, which the shell prompt, pi
 # and the dashboard show.
@@ -202,8 +260,20 @@ fi
 case $view in
 sidebar) side=$((30 + 2 * frames)) side_args="--sidebar" ;;
 compact) side=$((3 + 2 * frames)) side_args="--compact" ;;
-dashboard) side=0 side_args="" ;;
+dashboard | outside) side=0 side_args="" ;;
 esac
+
+# The size of the tmux sessions. In the outside view, where the dashboard
+# fills the terminal, their panes have the size of the dashboard's preview,
+# which shows the last lines of a pane, cut to its width. tmux's status
+# line takes a row.
+tmux_cols=$cols tmux_rows=$rows
+if [[ $view == outside ]]; then
+    lw=$((cols * 2 / 5))
+    ((lw < 34)) && lw=34
+    ((lw > 46)) && lw=46
+    tmux_cols=$((cols - lw - 3)) tmux_rows=$((rows - 5))
+fi
 
 # tabs SESSION: the session's lines of the scene.
 tabs() { awk -v s="$1" '$1 == s' <<<"$scene"; }
@@ -323,16 +393,16 @@ EOF
 start_zellij() {
     zellij_config
     local s
-    for s in $sessions; do
+    for s in $(sessions_of zellij); do
         zellij_layout "$s" >"$tmp/layouts/$s.kdl"
         zellij --layout "$tmp/layouts/$s.kdl" attach --create-background "$s"
         wait_until 30 zellij --session "$s" action list-panes -j ||
             die "zellij session $s did not start"
         sleep 1
     done
-    clear
-    zellij attach "$main"
 }
+
+attach_zellij() { zellij attach "$main"; }
 
 # ---------------------------------------------------------------- tmux
 
@@ -371,13 +441,13 @@ EOF
 start_tmux() {
     tmux_config >"$tmp/tmux.conf"
     local s _s tab project cmd args target
-    for s in $sessions; do
+    for s in $(sessions_of tmux); do
         target=""
         while read -r _s tab project cmd args; do
             set -- ${cmd:+"$cmd${args:+ $args}"}
             if [[ -z $target ]]; then
                 tmux -f "$tmp/tmux.conf" new-session -d -s "$s" -n "$tab" \
-                    -c "$HOME/code/$project" -x "$cols" -y "$rows" "$@"
+                    -c "$HOME/code/$project" -x "$tmux_cols" -y "$tmux_rows" "$@"
             else
                 tmux new-window -d -t "$s:" -n "$tab" -c "$HOME/code/$project" "$@"
             fi
@@ -389,7 +459,9 @@ start_tmux() {
         done < <(tabs "$s")
     done
     sleep 2
-    clear
+}
+
+attach_tmux() {
     if [[ $view == dashboard ]]; then
         tmux attach -t "$main" \; new-pane -O -x90% -y90% -X5% -Y5% \
             "multiplexer-sidebar --theme $theme"
@@ -398,4 +470,89 @@ start_tmux() {
     fi
 }
 
-"start_$mux"
+# ---------------------------------------------------------------- herdr
+
+# herdr_config: the user's config.toml, or one with a key binding for the
+# dashboard, with the first-run setup turned off. TOML takes each key once,
+# so the user's own onboarding line is left out.
+herdr_config() {
+    local conf="$XDG_CONFIG_HOME/herdr/config.toml"
+    echo "onboarding = false" >"$conf"
+    if [[ -n $user_herdr_conf ]]; then
+        grep -Ev '^[[:space:]]*onboarding[[:space:]]*=' "$user_herdr_conf" >>"$conf" || true
+    else
+        cat >>"$conf" <<EOF
+
+[[keys.command]]
+key = "prefix+alt+d"
+type = "popup"
+command = "multiplexer-sidebar --theme $theme"
+width = "90%"
+height = "90%"
+EOF
+    fi
+}
+
+# herdr_found N: whether herdr has found N agents and has given each a
+# status of its own.
+herdr_found() {
+    [[ $(herdr agent list |
+        jq '[.result.agents[] | select(.agent_status != "unknown")] | length') == "$1" ]]
+}
+
+# Each session is a workspace, and each of its tabs runs its command in the
+# shell of the tab's pane. herdr shows "done" for an agent that went from
+# working to idle while its workspace had no focus, so a "done" agent
+# reports working and then idle. Until herdr has given an agent a status of
+# its own, it takes a report of idle as idle, so the reports wait for that.
+start_herdr() {
+    herdr_config
+    (cd "$tmp" && nohup herdr server >/dev/null 2>&1 &)
+    wait_until 10 herdr workspace list || die "the herdr server did not start"
+    local s _s tab project cmd args reply ws pane status a
+    local -a agents=()
+    for s in $(sessions_of herdr); do
+        ws=""
+        while read -r _s tab project cmd args; do
+            if [[ -z $ws ]]; then
+                reply=$(herdr workspace create --cwd "$HOME/code/$project" --label "$s" --no-focus)
+                ws=$(jq -r .result.workspace.workspace_id <<<"$reply")
+                herdr tab rename "$(jq -r .result.tab.tab_id <<<"$reply")" "$tab" >/dev/null
+            else
+                reply=$(herdr tab create --workspace "$ws" --cwd "$HOME/code/$project" \
+                    --label "$tab" --no-focus)
+            fi
+            pane=$(jq -r .result.root_pane.pane_id <<<"$reply")
+            if [[ -n $cmd ]]; then
+                herdr pane run "$pane" "clear; exec $cmd${args:+ $args}" >/dev/null
+                # The last argument of an agent is its status.
+                [[ -z $args ]] || agents+=("$pane $cmd ${args##* }")
+            fi
+        done < <(tabs "$s")
+    done
+    wait_until 20 herdr_found "${#agents[@]}" ||
+        die "herdr did not find the scene's agents"
+
+
+    for a in "${agents[@]}"; do
+        read -r pane cmd status <<<"$a"
+        [[ $status != "done" ]] || status=working
+        herdr pane report-agent --source showcase --agent "$cmd" --state "$status" "$pane" >/dev/null
+    done
+    sleep 1
+    for a in "${agents[@]}"; do
+        read -r pane cmd status <<<"$a"
+        [[ $status != "done" ]] ||
+            herdr pane report-agent --source showcase --agent "$cmd" --state idle "$pane" >/dev/null
+    done
+}
+
+# ---------------------------------------------------------------- start
+
+for m in $muxes; do "start_$m"; done
+clear
+if [[ $view == outside ]]; then
+    multiplexer-dashboard --theme "$theme"
+else
+    "attach_$mux"
+fi
