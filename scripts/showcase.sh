@@ -1,45 +1,65 @@
 #!/usr/bin/env bash
-# Opens a made-up scene of coding agents at work, in a zellij or tmux of its
-# own, or spread over zellij, tmux and herdr, for screenshots of the
-# dashboard, the sidebar or the compact sidebar.
+# Opens a made-up scene of coding agents at work, for screenshots of the
+# dashboard. scripts/showcase.sh --help describes its views and options.
 #
-#   nix develop -c scripts/showcase.sh [dashboard|sidebar|compact|outside]
-#       [--mux zellij|tmux] [--theme dark|light] [--plain]
-#
-# The default is the dashboard in zellij. Run it in a terminal outside any
-# multiplexer, at the size the screenshot should have. The scene fills the
-# terminal; leave it as you leave the multiplexer, by detaching or quitting,
-# and the script removes everything it made.
-#
-# outside spreads the sessions over zellij, tmux and herdr, and runs the
-# dashboard in the terminal itself, outside any multiplexer, where it lists
-# the sessions and agents of all three. It takes no --mux. larder, with the
-# real pi, is the first tmux session. The scene ends when you quit the
-# dashboard, or when you leave the multiplexer that the dashboard attached
-# to.
-#
-# The multiplexers use your own configuration, so they have your theme,
-# status bar and keys: ~/.tmux.conf or ~/.config/tmux/tmux.conf, zellij's
-# config.kdl with its themes and layouts, and herdr's config.toml. --plain
-# uses a small configuration of the script's own instead. The dashboard, pi
-# and the stand-ins take the theme that matches the terminal's background,
-# or the one --theme names.
-#
-# The scene runs with its own HOME, XDG directories, sockets and PATH, and
-# without the variables that hold API keys or tokens, so it never reaches
-# your own sessions or accounts. Set KEEP=1 to keep its temporary directory.
-#
-# The pi agents are the real pi, which opens a made-up session that
-# scripts/showcase.py writes. claude, codex, opencode and agy are stand-ins
-# that draw a still screen from scripts/showcase.py. Every agent reports a
-# status with OSC 7501, which the dashboard shows in zellij. herdr finds the
-# agents itself, and the script reports their statuses to it. tmux has no
-# agent statuses, so in tmux the lists show the agents without one.
+# The pi agents are the real pi on made-up sessions that scripts/showcase.py
+# writes. The other agents are stand-ins that draw a still screen from
+# scripts/showcase.py. The stand-ins and the pi wrapper report their status
+# with OSC 7501, which zellij passes on to the dashboard. herdr finds the
+# agents itself, and start_herdr reports their statuses to it.
 
 set -euo pipefail
 
 usage() {
     echo "usage: scripts/showcase.sh [dashboard|sidebar|compact|outside] [--mux zellij|tmux] [--theme dark|light] [--plain]"
+}
+help() {
+    usage
+    cat <<'EOF'
+
+Opens a made-up scene of coding agents at work in a zellij, tmux and herdr
+of its own, for screenshots of multiplexer-dashboard. Run it inside
+nix develop, in a terminal outside any multiplexer, at the size that the
+screenshot should have.
+
+Views:
+  dashboard  The dashboard over the first session, in zellij or tmux. This
+             is the default.
+  sidebar    The sidebar next to every tab, in zellij or tmux.
+  compact    The compact sidebar next to every tab, in zellij or tmux.
+  outside    The dashboard in the terminal itself, outside any multiplexer.
+             The sessions are spread over zellij, tmux and herdr, and the
+             dashboard lists the sessions and agents of all three.
+
+Options:
+  --mux zellij|tmux   The multiplexer of the dashboard, sidebar and compact
+                      views. The default is zellij. outside takes no --mux.
+  --theme dark|light  The theme of the dashboard, pi and the stand-ins. The
+                      default matches the terminal's background.
+  --plain             Use a small configuration of the script's own instead
+                      of your tmux, zellij and herdr configuration.
+  -h, --help          Show this help.
+
+Agents:
+  The pi agents, in larder and photo-backup, are the real pi on a made-up
+  session. claude, codex, opencode and agy are stand-ins that draw a still
+  screen. zellij and herdr show the status of each agent. tmux has no agent
+  statuses, so its agents show without one.
+
+  In the outside view, the dashboard starts on the first zellij session.
+  larder is the first tmux session, and its panes have the size of the
+  dashboard's preview, so move down to larder for a screenshot of pi.
+
+Leaving:
+  Leave as you leave the multiplexer, by detaching or quitting. In the
+  outside view, quit the dashboard, or leave the multiplexer that it
+  attached to. The script then removes everything it made. Set KEEP=1 to
+  keep its temporary directory.
+
+The scene runs with its own HOME, XDG directories, sockets and PATH, and
+without the variables that hold API keys or tokens, so it never reaches your
+own sessions or accounts.
+EOF
 }
 die() {
     echo "showcase: $*" >&2
@@ -60,7 +80,7 @@ while (($#)); do
         ;;
     --plain) plain=1 ;;
     -h | --help)
-        usage
+        help
         exit 0
         ;;
     *)
@@ -161,8 +181,8 @@ trap cleanup EXIT
 # ---------------------------------------------------------------- the scene
 
 # The sessions, in the order they are listed, one tab per line:
-# SESSION TAB PROJECT COMMAND... A tab without a command runs a shell. The
-# first session is the one the terminal shows.
+# SESSION TAB PROJECT COMMAND... A tab without a command runs a shell. In
+# the views inside a multiplexer, the terminal shows the main session.
 scene="
 larder       agent    larder       pi larder working
 larder       review   larder       codex codex-review done
@@ -280,30 +300,42 @@ tabs() { awk -v s="$1" '$1 == s' <<<"$scene"; }
 
 # ---------------------------------------------------------------- zellij
 
+# zellij_layout SESSION: the layout of the session. Every tab has the tab
+# bar, the status bar and, in the sidebar views, the sidebar. In the
+# dashboard view, the first tab of the main session opens the dashboard in
+# a floating pane.
 zellij_layout() {
-    local session=$1 first=1 _s tab project cmd args a
-    echo "layout {"
-    echo "    default_tab_template {"
-    echo "        pane size=1 borderless=true {"
-    echo "            plugin location=\"tab-bar\""
-    echo "        }"
+    local session=$1 focus=" focus=true" _s tab project cmd args a
+    cat <<EOF
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="tab-bar"
+        }
+EOF
     if ((side)); then
-        echo "        pane split_direction=\"vertical\" {"
-        echo "            pane size=$side command=\"multiplexer-sidebar\" name=\"multiplexer-sidebar\" close_on_exit=true {"
-        echo "                args \"--theme\" \"$theme\" \"$side_args\""
-        echo "            }"
-        echo "            children"
-        echo "        }"
+        cat <<EOF
+        pane split_direction="vertical" {
+            pane size=$side command="multiplexer-sidebar" name="multiplexer-sidebar" close_on_exit=true {
+                args "--theme" "$theme" "$side_args"
+            }
+            children
+        }
+EOF
     else
         echo "        children"
     fi
-    echo "        pane size=2 borderless=true {"
-    echo "            plugin location=\"status-bar\""
-    echo "        }"
-    echo "    }"
+    cat <<EOF
+        pane size=2 borderless=true {
+            plugin location="status-bar"
+        }
+    }
+EOF
     while read -r _s tab project cmd args; do
-        echo "    tab name=\"$tab\" cwd=\"$HOME/code/$project\"$( ((first)) && echo " focus=true") {"
-        if [[ -n $cmd ]]; then
+        echo "    tab name=\"$tab\" cwd=\"$HOME/code/$project\"$focus {"
+        if [[ -z $cmd ]]; then
+            echo "        pane focus=true"
+        else
             echo "        pane command=\"$cmd\" focus=true {"
             if [[ -n $args ]]; then
                 printf '            args'
@@ -311,18 +343,18 @@ zellij_layout() {
                 echo
             fi
             echo "        }"
-        else
-            echo "        pane focus=true"
         fi
-        if ((first)) && [[ $view == dashboard && $session == "$main" ]]; then
-            echo "        floating_panes {"
-            echo "            pane command=\"multiplexer-sidebar\" name=\"multiplexer-sidebar\" close_on_exit=true x=\"5%\" y=\"5%\" width=\"90%\" height=\"90%\" {"
-            echo "                args \"--theme\" \"$theme\""
-            echo "            }"
-            echo "        }"
+        if [[ -n $focus && $view == dashboard && $session == "$main" ]]; then
+            cat <<EOF
+        floating_panes {
+            pane command="multiplexer-sidebar" name="multiplexer-sidebar" close_on_exit=true x="5%" y="5%" width="90%" height="90%" {
+                args "--theme" "$theme"
+            }
+        }
+EOF
         fi
         echo "    }"
-        first=0
+        focus=""
     done < <(tabs "$session")
     echo "}"
 }
@@ -387,9 +419,9 @@ EOF
 # Every session starts in the background, one after another and a second
 # apart, since zellij gives their ages in whole seconds and the dashboard
 # lists them by age. A session without a client is about 50 columns wide,
-# so the dashboard's preview of another session is narrow until that
-# session has a client of its own; the main session takes the terminal's
-# size once the terminal attaches.
+# so the dashboard's preview of a session is narrow until the session has a
+# client. The main session takes the terminal's size once the terminal
+# attaches to it.
 start_zellij() {
     zellij_config
     local s
@@ -476,12 +508,12 @@ attach_tmux() {
 # dashboard, with the first-run setup turned off. TOML takes each key once,
 # so the user's own onboarding line is left out.
 herdr_config() {
-    local conf="$XDG_CONFIG_HOME/herdr/config.toml"
-    echo "onboarding = false" >"$conf"
-    if [[ -n $user_herdr_conf ]]; then
-        grep -Ev '^[[:space:]]*onboarding[[:space:]]*=' "$user_herdr_conf" >>"$conf" || true
-    else
-        cat >>"$conf" <<EOF
+    {
+        echo "onboarding = false"
+        if [[ -n $user_herdr_conf ]]; then
+            grep -Ev '^[[:space:]]*onboarding[[:space:]]*=' "$user_herdr_conf" || true
+        else
+            cat <<EOF
 
 [[keys.command]]
 key = "prefix+alt+d"
@@ -490,7 +522,8 @@ command = "multiplexer-sidebar --theme $theme"
 width = "90%"
 height = "90%"
 EOF
-    fi
+        fi
+    } >"$XDG_CONFIG_HOME/herdr/config.toml"
 }
 
 # herdr_found N: whether herdr has found N agents and has given each a
@@ -532,7 +565,6 @@ start_herdr() {
     done
     wait_until 20 herdr_found "${#agents[@]}" ||
         die "herdr did not find the scene's agents"
-
 
     for a in "${agents[@]}"; do
         read -r pane cmd status <<<"$a"
