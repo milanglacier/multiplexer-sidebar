@@ -234,9 +234,9 @@ def upload_part(bucket: str, key: str, body: bytes) -> None:
 """
 
 
-def shop_api_session(home: str) -> PiSession:
+def larder_session(home: str) -> PiSession:
     """pi, at work on a slow endpoint."""
-    s = PiSession(f"{home}/code/shop-api", "anthropic", "claude-opus-5-5", 26)
+    s = PiSession(f"{home}/code/larder", "anthropic", "claude-opus-5-5", 26)
     s.user(
         "GET /orders takes about 4 seconds on staging. Find out why, fix it, "
         "and add a test so that it does not come back."
@@ -335,30 +335,30 @@ def shop_api_session(home: str) -> PiSession:
     return s
 
 
-def data_pipeline_session(home: str) -> PiSession:
+def photo_backup_session(home: str) -> PiSession:
     """pi, done with a fix."""
-    s = PiSession(f"{home}/code/data-pipeline", "openai", "gpt-5.3-codex", 48)
+    s = PiSession(f"{home}/code/photo-backup", "openai", "gpt-5.3-codex", 48)
     s.user(
-        "The nightly export to S3 fails about once a week with SlowDown "
+        "The nightly backup to S3 fails about once a week with SlowDown "
         "errors. Retry with backoff, and log each retry."
     )
     s.tool(
         "read",
-        {"path": "pipeline/export/s3_uploader.py"},
+        {"path": "photo_backup/s3_uploader.py"},
         UPLOADER_PY,
         text="I'll read the uploader first.",
     )
     s.tool(
         "bash",
-        {"command": "rg -n 'SlowDown' logs/export-*.log | tail -3"},
-        "logs/export-2026-11-02.log:4113:ClientError: An error occurred (SlowDown) when calling the PutObject operation\n"
-        "logs/export-2026-11-09.log:3987:ClientError: An error occurred (SlowDown) when calling the PutObject operation\n"
-        "logs/export-2026-11-14.log:4420:ClientError: An error occurred (SlowDown) when calling the PutObject operation",
+        {"command": "rg -n 'SlowDown' logs/backup-*.log | tail -3"},
+        "logs/backup-2026-11-02.log:4113:ClientError: An error occurred (SlowDown) when calling the PutObject operation\n"
+        "logs/backup-2026-11-09.log:3987:ClientError: An error occurred (SlowDown) when calling the PutObject operation\n"
+        "logs/backup-2026-11-14.log:4420:ClientError: An error occurred (SlowDown) when calling the PutObject operation",
     )
     s.tool(
         "edit",
-        {"path": "pipeline/export/s3_uploader.py", "oldText": "", "newText": ""},
-        "Successfully replaced 2 block(s) in pipeline/export/s3_uploader.py.",
+        {"path": "photo_backup/s3_uploader.py", "oldText": "", "newText": ""},
+        "Successfully replaced 2 block(s) in photo_backup/s3_uploader.py.",
         text="`upload_part` calls `put_object` once, and any `ClientError` ends "
         "the run. S3 answers `SlowDown` when we send requests too fast, and "
         "that error is safe to retry.",
@@ -388,7 +388,7 @@ def data_pipeline_session(home: str) -> PiSession:
     )
     s.tool(
         "bash",
-        {"command": "pytest tests/export -q"},
+        {"command": "pytest -q"},
         "..............                                                 [100%]\n"
         "14 passed in 2.31s",
         text="I added two tests: one where S3 answers SlowDown twice and then "
@@ -403,15 +403,15 @@ def data_pipeline_session(home: str) -> PiSession:
         "loudly as before.\n"
         "- `test_upload_retries_on_slowdown` and "
         "`test_upload_gives_up_after_five_attempts` cover both paths. All 14 "
-        "export tests pass.",
+        "tests pass.",
         seconds=30,
     )
     return s
 
 
 PI_SESSIONS: dict[str, Callable[[str], PiSession]] = {
-    "shop-api": shop_api_session,
-    "data-pipeline": data_pipeline_session,
+    "larder": larder_session,
+    "photo-backup": photo_backup_session,
 }
 
 
@@ -512,7 +512,7 @@ def code_lines(mark: str, lines: list[tuple[int, str]], width: int) -> list[str]
 Screen = tuple[list[str], list[str]]
 
 
-def claude_web(w: int) -> Screen:
+def claude_kilnworks(w: int) -> Screen:
     """Claude Code, at work on a form."""
     body = [
         "«muted»>«» Redesign the checkout form: one column, inline validation,",
@@ -563,7 +563,7 @@ def claude_web(w: int) -> Screen:
     return body, footer
 
 
-def claude_infra(w: int) -> Screen:
+def claude_infra_live(w: int) -> Screen:
     """Claude Code, waiting for permission to run a command."""
     body = [
         "«muted»>«» Move the staging database to db.r6g.xlarge and apply it.",
@@ -612,7 +612,7 @@ def codex_review(w: int) -> Screen:
             "«b»>_ OpenAI Codex«» «muted»(v0.98.0)«»",
             "",
             "«muted»model:«»     gpt-5.3-codex high   «cyan»/model«» «muted»to change«»",
-            "«muted»directory:«» ~/code/shop-api",
+            "«muted»directory:«» ~/code/larder",
         ],
         min(w, 64),
     ) + [
@@ -648,7 +648,7 @@ def codex_review(w: int) -> Screen:
     return body, footer
 
 
-def opencode_mobile(w: int) -> Screen:
+def opencode_switchback(w: int) -> Screen:
     """opencode, idle after an answer."""
     bar = "«opencode»┃«»"
     body = [
@@ -686,7 +686,7 @@ def opencode_mobile(w: int) -> Screen:
     return body, footer
 
 
-def agy_docs(w: int) -> Screen:
+def agy_tributary(w: int) -> Screen:
     """Antigravity, at work on a guide."""
     inner = w - 6
     body = [
@@ -731,18 +731,18 @@ def agy_docs(w: int) -> Screen:
     footer = box(
         ["«gemini»>«»   «muted»Type your message or @path/to/file«»"], w, "gemini"
     )
-    left = "«blue»~/code/docs«» «violet»(docs/streaming-guide*)«»"
+    left = "«blue»~/code/tributary«» «violet»(docs/streaming-guide*)«»"
     right = "«muted»gemini-3-pro«» «muted»(92% context left)«»"
     footer.append(left + " " * max(1, w - visible(left) - visible(right)) + right)
     return body, footer
 
 
 SCREENS: dict[str, Callable[[int], Screen]] = {
-    "claude-web": claude_web,
-    "claude-infra": claude_infra,
+    "claude-kilnworks": claude_kilnworks,
+    "claude-infra-live": claude_infra_live,
     "codex-review": codex_review,
-    "opencode-mobile": opencode_mobile,
-    "agy-docs": agy_docs,
+    "opencode-switchback": opencode_switchback,
+    "agy-tributary": agy_tributary,
 }
 
 
@@ -788,7 +788,7 @@ def show(name: str, status: str) -> None:
 # ---------------------------------------------------------------- server log
 
 LOG = """\
-INFO:     Will watch for changes in these directories: ['{home}/code/shop-api']
+INFO:     Will watch for changes in these directories: ['{home}/code/larder']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 INFO:     Started reloader process [48211] using WatchFiles
 INFO:     Started server process [48236]

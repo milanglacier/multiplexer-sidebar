@@ -130,24 +130,25 @@ trap cleanup EXIT
 # SESSION TAB PROJECT COMMAND... A tab without a command runs a shell. The
 # first session is the one the terminal shows.
 scene="
-shop-api      agent    shop-api       pi shop-api working
-shop-api      review   shop-api       codex codex-review done
-shop-api      server   shop-api       uvicorn
-web           checkout web            claude claude-web working
-web           shell    web
-infra         staging  infra          claude claude-infra blocked
-mobile        ios      mobile         opencode opencode-mobile idle
-docs          guide    docs           agy agy-docs working
-data-pipeline export   data-pipeline  pi data-pipeline done
-dotfiles      shell    dotfiles
+larder       agent    larder       pi larder working
+larder       review   larder       codex codex-review done
+larder       server   larder       uvicorn
+kilnworks    checkout kilnworks    claude claude-kilnworks working
+kilnworks    shell    kilnworks
+infra-live   staging  infra-live   claude claude-infra-live blocked
+switchback   ios      switchback   opencode opencode-switchback idle
+tributary    guide    tributary    agy agy-tributary working
+photo-backup backup   photo-backup pi photo-backup done
+dotfiles     shell    dotfiles
 "
-main=shop-api
+main=larder
 sessions=$(awk 'NF && !seen[$1]++ { print $1 }' <<<"$scene")
 
 # Each project is a git repository on a branch, which the shell prompt, pi
 # and the dashboard show.
-for p in shop-api:fix/orders-n-plus-one web:feat/one-column-checkout infra:main \
-    mobile:release/2.4 docs:docs/streaming-guide data-pipeline:fix/s3-retries \
+for p in larder:fix/orders-n-plus-one kilnworks:feat/one-column-checkout \
+    infra-live:main switchback:release/2.4 tributary:docs/streaming-guide \
+    photo-backup:fix/s3-retries \
     dotfiles:main; do
     mkdir -p "$HOME/code/${p%%:*}"
     git -C "$HOME/code/${p%%:*}" init -q -b "${p#*:}"
