@@ -1370,6 +1370,8 @@ class AnsiTest(unittest.TestCase):
         self.assertEqual(md.width("\x1b[1;38;2;1;2;3mab\x1b[0m"), 2)
         self.assertEqual(md.width("日本"), 4)
         self.assertEqual(md.width("é"), 1)
+        self.assertEqual(md.width("\u200bdotfiles"), 8)
+        self.assertEqual(md.width("a\u00adb"), 3)
 
     def test_cut_carries_colors(self):
         s = "\x1b[31mabc\x1b[0mdef"
@@ -1382,6 +1384,7 @@ class AnsiTest(unittest.TestCase):
             self.assertEqual(plain(md.fit("abcdef", 4)), "abc…")
             self.assertEqual(plain(md.fit("ab", 4)), "ab  ")
             self.assertEqual(md.width(md.fit("日本語", 4)), 4)
+            self.assertEqual(plain(md.fit("\u200bab", 4)), "\u200bab  ")
         finally:
             md.Canvas.paint_bg = True
 

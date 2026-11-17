@@ -487,7 +487,13 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;:?<=>]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\
 
 
 def cell_width(ch: str) -> int:
+    # Terminals draw marks that combine with the character before them, such
+    # as U+0301 or the emoji variation selector U+FE0F, and invisible format
+    # characters, such as the zero-width space U+200B, in no cell. The soft
+    # hyphen U+00AD is a format character that terminals draw in one cell.
     if unicodedata.combining(ch):
+        return 0
+    if unicodedata.category(ch) in ("Mn", "Me", "Cf") and ch != "\u00ad":
         return 0
     return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
