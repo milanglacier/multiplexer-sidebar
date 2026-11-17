@@ -66,7 +66,6 @@ done
 here=$(cd "$(dirname "$0")" && pwd)
 dash="$here/../multiplexer-dashboard"
 command -v "$mux" >/dev/null || die "$mux is not installed; run inside nix develop"
-command -v tmux >/dev/null || die "tmux is not installed; run inside nix develop"
 command -v python3 >/dev/null || die "python3 is not installed"
 realpi=$(command -v pi) || die "pi is not installed; see https://pi.dev"
 [[ -t 0 && -t 1 ]] || die "run it in a terminal"
@@ -114,15 +113,10 @@ mkdir -p "$HOME/.pi/agent" "$ZELLIJ_CONFIG_DIR" "$XDG_CACHE_HOME" "$XDG_DATA_HOM
     "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$TMUX_TMPDIR" "$tmp/bin" "$tmp/pi" "$tmp/layouts"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-# The harness is a hidden tmux server whose windows play the terminal of
-# each zellij session while the scene starts. Its variables stay out of
-# zellij, or the panes would think that they run in tmux.
-th() { tmux -L harness -f /dev/null "$@"; }
-outside_harness="env -u TMUX -u TMUX_PANE -u TERM_PROGRAM -u TERM_PROGRAM_VERSION TERM=$TERM"
 cleanup() {
-    th kill-server 2>/dev/null || true
-    tmux kill-server 2>/dev/null || true
-    if [[ $mux == zellij ]]; then
+    if [[ $mux == tmux ]]; then
+        tmux kill-server 2>/dev/null || true
+    else
         zellij kill-all-sessions -y >/dev/null 2>&1 || true
         zellij delete-all-sessions -y >/dev/null 2>&1 || true
     fi
@@ -210,25 +204,6 @@ compact) side=$((3 + 2 * frames)) side_args="--compact" ;;
 dashboard) side=0 side_args="" ;;
 esac
 
-# The size of the other sessions. The preview of the dashboard shows the
-# last lines of a pane, cut to its width, so in the dashboard view their
-# panes have the size of the preview of a dashboard that covers 90% of the
-# terminal, as the multiplexer's key binding opens it. The sessions keep
-# the rows of zellij's tab bar and status bar, or of tmux's status line.
-other_cols=$cols other_rows=$rows
-if [[ $view == dashboard ]]; then
-    dc=$((cols * 9 / 10 - 2)) dr=$((rows * 9 / 10 - 2))
-    lw=$((dc * 2 / 5))
-    ((lw < 34)) && lw=34
-    ((lw > 46)) && lw=46
-    other_cols=$((dc - lw - 3)) other_rows=$((dr - 6))
-    if [[ $mux == zellij ]]; then
-        other_rows=$((other_rows + 3))
-    else
-        other_rows=$((other_rows + 1))
-    fi
-fi
-
 # tabs SESSION: the session's lines of the scene.
 tabs() { awk -v s="$1" '$1 == s' <<<"$scene"; }
 
@@ -291,9 +266,12 @@ wait_until() {
     done
 }
 
-# zellij_config: the user's config.kdl, themes and layouts, with the options
-# that the scene needs and the configuration leaves out. Without a
-# configuration of the user's, one with a key binding for the dashboard.
+# zellij_config: the user's config.kdl, themes and layouts, or one with a
+# key binding for the dashboard, then the options that the scene needs.
+# zellij takes the last value of an option and merges blocks of the same
+# name, so the options at the end override the user's. The sessions start
+# without a client, so zellij would cover the main session with its card
+# of what happened while no one was attached; the scene turns that card off.
 zellij_config() {
     local conf="$ZELLIJ_CONFIG_DIR/config.kdl" d
     if [[ -n $user_zellij_dir ]]; then
@@ -301,18 +279,23 @@ zellij_config() {
         for d in themes layouts; do
             [[ -d $user_zellij_dir/$d ]] && ln -s "$user_zellij_dir/$d" "$ZELLIJ_CONFIG_DIR/$d"
         done
-        grep -Eq '^[[:space:]]*show_startup_tips[[:space:]]' "$conf" ||
-            echo "show_startup_tips false" >>"$conf"
-        grep -Eq '^[[:space:]]*show_release_notes[[:space:]]' "$conf" ||
-            echo "show_release_notes false" >>"$conf"
-        grep -Eq '^[[:space:]]*default_shell[[:space:]]' "$conf" ||
-            echo "default_shell \"$SHELL\"" >>"$conf"
-        return
+    else
+        zellij_keys >"$conf"
     fi
-    cat >"$conf" <<EOF
+    cat >>"$conf" <<EOF
 show_startup_tips false
 show_release_notes false
 default_shell "$SHELL"
+attention {
+    startup_card "never"
+}
+EOF
+}
+
+# zellij_keys: Alt d opens the dashboard, for a scene without the user's
+# configuration.
+zellij_keys() {
+    cat <<EOF
 keybinds {
     shared_except "locked" {
         bind "Alt d" {
@@ -330,25 +313,22 @@ keybinds {
 EOF
 }
 
+# Every session starts in the background, one after another and a second
+# apart, since zellij gives their ages in whole seconds and the dashboard
+# lists them by age. A session without a client is about 50 columns wide,
+# so the dashboard's preview of another session is narrow until that
+# session has a client of its own; the main session takes the terminal's
+# size once the terminal attaches.
 start_zellij() {
     zellij_config
-    local s w h
-    # One session after another and a second apart, since zellij gives
-    # their ages in whole seconds and the dashboard lists them by age.
+    local s
     for s in $sessions; do
         zellij_layout "$s" >"$tmp/layouts/$s.kdl"
-        w=$other_cols h=$other_rows
-        [[ $s == "$main" ]] && w=$cols h=$rows
-        th new-session -d -s "$s" -x "$w" -y "$h" \
-            "$outside_harness zellij --layout '$tmp/layouts/$s.kdl' attach --create '$s'"
+        zellij --layout "$tmp/layouts/$s.kdl" attach --create-background "$s"
         wait_until 30 zellij --session "$s" action list-panes -j ||
             die "zellij session $s did not start"
         sleep 1
     done
-    # The last pi reports its status 4 seconds after it starts. Then the
-    # hidden clients go away and the sessions stay.
-    sleep 5
-    th kill-server
     clear
     zellij attach "$main"
 }
@@ -389,16 +369,14 @@ EOF
 
 start_tmux() {
     tmux_config >"$tmp/tmux.conf"
-    local s w h _s tab project cmd args target
+    local s _s tab project cmd args target
     for s in $sessions; do
-        w=$other_cols h=$other_rows
-        [[ $s == "$main" ]] && w=$cols h=$rows
         target=""
         while read -r _s tab project cmd args; do
             set -- ${cmd:+"$cmd${args:+ $args}"}
             if [[ -z $target ]]; then
                 tmux -f "$tmp/tmux.conf" new-session -d -s "$s" -n "$tab" \
-                    -c "$HOME/code/$project" -x "$w" -y "$h" "$@"
+                    -c "$HOME/code/$project" -x "$cols" -y "$rows" "$@"
             else
                 tmux new-window -d -t "$s:" -n "$tab" -c "$HOME/code/$project" "$@"
             fi
