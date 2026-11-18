@@ -19,11 +19,19 @@ Press Enter to jump there.
 
 ## Showcase
 
-### Outside
+### Dashboard across tmux, Zellij, and herdr
+
+Run the dashboard from a shell outside any multiplexer to browse sessions
+and agents across all three. Press Enter to jump to the selected session
+or agent.
 
 ![Dark dashboard outside a multiplexer](assets/outside-dark.png)
 
-### Popup
+### Dashboard inside Zellij
+
+Open the dashboard in a floating pane to browse Zellij sessions, see which
+agents are working or waiting for you, and preview the selected session or
+agent.
 
 ![Dark dashboard in a Zellij popup](assets/zellij-dark-popup.png)
 
@@ -38,11 +46,11 @@ Press Enter to jump there.
 <details name="showcase-variants">
 <summary>Zellij · Light</summary>
 
-**Outside**
+**Dashboard across tmux, Zellij, and herdr**
 
 ![Light dashboard outside a multiplexer](assets/outside-light.png)
 
-**Popup**
+**Dashboard inside Zellij**
 
 ![Light dashboard in a Zellij popup](assets/zellij-light-popup.png)
 
@@ -59,11 +67,13 @@ Press Enter to jump there.
 <details name="showcase-variants">
 <summary>tmux · Dark</summary>
 
-**Outside**
+**Dashboard across tmux, Zellij, and herdr**
 
 ![Dark dashboard outside a multiplexer](assets/outside-dark.png)
 
-**Popup**
+**Dashboard inside tmux**
+
+Browse tmux sessions and agents in a floating pane with a live preview.
 
 ![Dark dashboard in a tmux popup](assets/tmux-dark-popup.png)
 
@@ -80,11 +90,13 @@ Press Enter to jump there.
 <details name="showcase-variants">
 <summary>tmux · Light</summary>
 
-**Outside**
+**Dashboard across tmux, Zellij, and herdr**
 
 ![Light dashboard outside a multiplexer](assets/outside-light.png)
 
-**Popup**
+**Dashboard inside tmux**
+
+Browse tmux sessions and agents in a floating pane with a live preview.
 
 ![Light dashboard in a tmux popup](assets/tmux-light-popup.png)
 
