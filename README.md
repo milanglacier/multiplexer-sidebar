@@ -35,11 +35,18 @@ agent.
 
 ![Dark dashboard in a Zellij popup](assets/zellij-dark-popup.png)
 
-### Sidebar
+### Full-width sidebar
 
-![Dark sidebar in Zellij](assets/zellij-dark-sidebar.png)
+Keep a herdr-style sidebar open in a pane beside your work in Zellij or
+tmux. It shows session and agent names, along with any reported agent
+status.
 
-### Compact
+![Dark full-width sidebar in Zellij](assets/zellij-dark-sidebar.png)
+
+### Compact sidebar
+
+Use a three-column strip beside your work when screen space is tight. It
+shows numbered sessions and agents, with status indicators when available.
 
 ![Dark compact sidebar in Zellij](assets/zellij-dark-compact.png)
 
@@ -54,11 +61,11 @@ agent.
 
 ![Light dashboard in a Zellij popup](assets/zellij-light-popup.png)
 
-**Sidebar**
+**Full-width sidebar**
 
-![Light sidebar in Zellij](assets/zellij-light-sidebar.png)
+![Light full-width sidebar in Zellij](assets/zellij-light-sidebar.png)
 
-**Compact**
+**Compact sidebar**
 
 ![Light compact sidebar in Zellij](assets/zellij-light-compact.png)
 
@@ -77,11 +84,11 @@ Browse tmux sessions and agents in a floating pane with a live preview.
 
 ![Dark dashboard in a tmux popup](assets/tmux-dark-popup.png)
 
-**Sidebar**
+**Full-width sidebar**
 
-![Dark sidebar in tmux](assets/tmux-dark-sidebar.png)
+![Dark full-width sidebar in tmux](assets/tmux-dark-sidebar.png)
 
-**Compact**
+**Compact sidebar**
 
 ![Dark compact sidebar in tmux](assets/tmux-dark-compact.png)
 
@@ -100,11 +107,11 @@ Browse tmux sessions and agents in a floating pane with a live preview.
 
 ![Light dashboard in a tmux popup](assets/tmux-light-popup.png)
 
-**Sidebar**
+**Full-width sidebar**
 
-![Light sidebar in tmux](assets/tmux-light-sidebar.png)
+![Light full-width sidebar in tmux](assets/tmux-light-sidebar.png)
 
-**Compact**
+**Compact sidebar**
 
 ![Light compact sidebar in tmux](assets/tmux-light-compact.png)
 
