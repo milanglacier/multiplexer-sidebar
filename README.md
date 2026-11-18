@@ -17,11 +17,11 @@ Press Enter to jump there.
 - Create, rename and kill sessions without remembering each multiplexer's
   commands.
 
-It is a standalone Python script with no dependencies. It uses only the
-standard library of Python 3.9 or later, so you can copy it to any machine,
-including a remote server you SSH into, and run it right away, with nothing to
-install or compile. Even so, it looks and feels like a modern terminal app
-built with a framework such as [Ratatui](https://ratatui.rs) or [Bubble
+It is a standalone Python script with no dependencies (only used stdlib). You
+can copy it to any machine, including a remote server you SSH into, and run it
+right away, with nothing to install or compile. Even so, it looks and feels
+like a modern terminal app built with a framework such as
+[Ratatui](https://ratatui.rs) or [Bubble
 Tea](https://github.com/charmbracelet/bubbletea), with gradient colors, rounded
 borders, themes that match your terminal's dark or light background, and smooth
 keyboard navigation.
