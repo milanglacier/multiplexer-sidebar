@@ -17,6 +17,87 @@ Press Enter to jump there.
 - Create, rename and kill sessions without remembering each multiplexer's
   commands.
 
+## Showcase
+
+### Outside
+
+![Dark dashboard outside a multiplexer](assets/outside-dark.png)
+
+### Popup
+
+![Dark dashboard in a Zellij popup](assets/zellij-dark-popup.png)
+
+### Sidebar
+
+![Dark sidebar in Zellij](assets/zellij-dark-sidebar.png)
+
+### Compact
+
+![Dark compact sidebar in Zellij](assets/zellij-dark-compact.png)
+
+<details name="showcase-variants">
+<summary>Zellij · Light</summary>
+
+**Outside**
+
+![Light dashboard outside a multiplexer](assets/outside-light.png)
+
+**Popup**
+
+![Light dashboard in a Zellij popup](assets/zellij-light-popup.png)
+
+**Sidebar**
+
+![Light sidebar in Zellij](assets/zellij-light-sidebar.png)
+
+**Compact**
+
+![Light compact sidebar in Zellij](assets/zellij-light-compact.png)
+
+</details>
+
+<details name="showcase-variants">
+<summary>tmux · Dark</summary>
+
+**Outside**
+
+![Dark dashboard outside a multiplexer](assets/outside-dark.png)
+
+**Popup**
+
+![Dark dashboard in a tmux popup](assets/tmux-dark-popup.png)
+
+**Sidebar**
+
+![Dark sidebar in tmux](assets/tmux-dark-sidebar.png)
+
+**Compact**
+
+![Dark compact sidebar in tmux](assets/tmux-dark-compact.png)
+
+</details>
+
+<details name="showcase-variants">
+<summary>tmux · Light</summary>
+
+**Outside**
+
+![Light dashboard outside a multiplexer](assets/outside-light.png)
+
+**Popup**
+
+![Light dashboard in a tmux popup](assets/tmux-light-popup.png)
+
+**Sidebar**
+
+![Light sidebar in tmux](assets/tmux-light-sidebar.png)
+
+**Compact**
+
+![Light compact sidebar in tmux](assets/tmux-light-compact.png)
+
+</details>
+
 ## Why
 
 The best part of herdr is its sidebar: it shows your workspaces and your
