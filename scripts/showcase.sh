@@ -269,17 +269,15 @@ ln -s "$dash" "$tmp/bin/multiplexer-sidebar"
 ln -s "$dash" "$tmp/bin/multiplexer-dashboard"
 chmod +x "$tmp/bin/"*
 
-# zellij draws a border around each pane unless the configuration turns
-# pane frames off.
-frames=1
-if [[ $mux == tmux ]] ||
-    grep -Eq '^[[:space:]]*pane_frames[[:space:]]+false' "$user_zellij_dir/config.kdl" 2>/dev/null; then
-    frames=0
-fi
+# zellij takes one column of a pane's size for the line between it and the
+# next pane, with pane frames on or off. tmux draws that line outside the
+# pane's size.
+border=0
+[[ $mux == tmux ]] || border=1
 # The sidebar's width and its arguments.
 case $view in
-sidebar) side=$((30 + 2 * frames)) side_args="--sidebar" ;;
-compact) side=$((3 + 2 * frames)) side_args="--compact" ;;
+sidebar) side=$((30 + border)) side_args="--sidebar" ;;
+compact) side=$((3 + border)) side_args="--compact" ;;
 dashboard | outside) side=0 side_args="" ;;
 esac
 
